@@ -9,8 +9,26 @@ struct InstallPackageParams {
     package: String
 }
 
+#[derive(Deserialize)]
+struct CreatePackageRequestData {
+    name : String,
+}
+
 #[post("/createPackage")]
-async fn create_package(pool : web::Data<PgPool>) -> impl Responder {
+async fn create_package(pool : web::Data<PgPool>, request_data : web::Json<CreatePackageRequestData>) -> impl Responder {
+    let query_result = sqlx::query("INSERT INTO packages (name) VALUES ($1) ON CONFLICT (name) DO NOTHING")
+        .bind(request_data.name.clone())
+        .execute(&**pool)
+        .await
+        .unwrap();
+
+    match query_result.rows_affected() {
+        0 => {
+            return HttpResponse::Conflict().body("duplicate name");
+        },
+        _ => {}
+    };
+
     return HttpResponse::Ok().body(String::new());
 }
 
@@ -36,6 +54,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
         .app_data(Data::new(pool.clone()))
         .service(install_package)
+        .service(create_package)
     })
     .bind(("127.0.0.1", 8080))?
     .run()
